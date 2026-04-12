@@ -757,6 +757,35 @@ footer {
   .route-cards > div[style*="font-size:20px"] { font-size: 14px !important; }
   .preview-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ===== TTS READ-ALOUD ===== */
+.tts-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(140,107,44,0.08); border: 1px solid rgba(140,107,44,0.2);
+  color: var(--gold); font-size: 14px; cursor: pointer;
+  margin-left: 6px; vertical-align: middle;
+  transition: all 0.2s; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  position: relative; top: -1px;
+}
+.tts-btn:hover { background: rgba(140,107,44,0.15); }
+.tts-btn:active { transform: scale(0.9); }
+.tts-btn.speaking {
+  background: var(--gold); color: var(--parchment-light);
+  border-color: var(--gold); animation: tts-pulse 1.2s infinite;
+}
+@keyframes tts-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(140,107,44,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(140,107,44,0); }
+}
+.tts-wrap {
+  display: flex; align-items: flex-start; gap: 0;
+}
+.tts-wrap > .tts-btn {
+  margin-top: 4px;
+}
+
 </style>
 </head>
 <body>
@@ -797,7 +826,7 @@ footer {
   <div class="section-header fade-in visible"><div class="diamond"></div><span class="section-label">The Journey</span><span class="section-label-cn">· 旅程</span></div>
 
   <div class="scroll-card fade-in visible">
-    <p class="story-text">We\'re traveling from China\'s <strong>oldest capital to its last one</strong> — 5 cities, 2,000 years of history, connected by high-speed rail. Each city was the center of the world during its dynasty. Each one adds a new chapter to the story.</p>
+    <p class="story-text">We're traveling from China's <strong>oldest capital to its last one</strong> — 5 cities, 2,000 years of history, connected by high-speed rail. Each city was the center of the world during its dynasty. Each one adds a new chapter to the story.</p>
     <p class="story-cn">我们从中国最古老的首都走到最后一个首都——5座城市，2000年历史，高铁串联。每座城市都曾是它那个时代的世界中心。</p>
   </div>
 
@@ -967,7 +996,7 @@ footer {
       <div style="font-size:11px;color:var(--red);letter-spacing:2px;font-weight:700;margin-bottom:6px">CHAPTER 1 · 第一章</div>
       <div style="font-size:24px;font-weight:900;font-family:&#39;Noto Serif SC&#39;,serif;margin-bottom:2px">西安 Xi'an</div>
       <div style="font-size:14px;color:var(--ink-faint);font-style:italic;margin-bottom:10px">The Underground Army &amp; the Golden Age</div>
-      <div style="font-size:14px;color:var(--ink-light);line-height:1.7">Qin Shi Huang united China at 38 and buried 8,000 warriors underground. Liu Bang won the throne by hiring geniuses. Tang Chang'an became the world\'s #1 city with 1 million people.</div>
+      <div style="font-size:14px;color:var(--ink-light);line-height:1.7">Qin Shi Huang united China at 38 and buried 8,000 warriors underground. Liu Bang won the throne by hiring geniuses. Tang Chang'an became the world's #1 city with 1 million people.</div>
       <div style="font-size:13px;color:var(--ink-faint);line-height:1.6;margin-top:6px">秦始皇38岁统一中国，埋了8000兵马俑。刘邦靠招揽天才赢天下。唐长安成为百万人口的世界第一城。</div>
       <div style="margin-top:10px;font-size:12px;color:var(--gold);font-weight:700">⚔️ 6 characters · 3 acts · 7 gross facts → Click to read</div>
     </div>
@@ -2812,6 +2841,130 @@ function toggleMyth(h) {
   h.nextElementSibling.classList.toggle('open');
   h.querySelector('.myth-arrow').classList.toggle('open');
 }
+
+
+
+// ===== TTS READ-ALOUD =====
+(function() {
+  var synth = window.speechSynthesis;
+  if (!synth) return; // not supported
+
+  var currentBtn = null;
+  var READABLE = '.story-text, .story-cn, .char-card-desc, .char-card-desc-cn, .char-card-hook, .char-card-hook-cn, .char-card-verdict, .char-card-skill, .fact-desc, .quiz-scenario, .quiz-answer.show p, .tl-desc, .tl-desc-cn, .tl-note, .tl-summary-text, .analysis-text, .myth-text, .world-china, .world-other';
+
+  function detectLang(text) {
+    var cn = text.match(/[\u4e00-\u9fff]/g);
+    return (cn && cn.length > text.length * 0.15) ? 'zh-CN' : 'en-US';
+  }
+
+  function stopSpeaking() {
+    synth.cancel();
+    if (currentBtn) {
+      currentBtn.classList.remove('speaking');
+      currentBtn.textContent = '🔊';
+      currentBtn = null;
+    }
+  }
+
+  // Voice cache
+  var voiceCache = {};
+  function pickVoice(lang) {
+    if (voiceCache[lang]) return voiceCache[lang];
+    var voices = synth.getVoices();
+    if (!voices.length) return null;
+    // Filter voices matching this language
+    var matched = voices.filter(function(v) { return v.lang.replace('_','-').indexOf(lang.split('-')[0]) === 0; });
+    if (!matched.length) matched = voices.filter(function(v) { return v.lang.indexOf(lang.split('-')[0]) >= 0; });
+    if (!matched.length) return null;
+    // Prefer male: look for keywords in voice name
+    var male = matched.filter(function(v) {
+      var n = v.name.toLowerCase();
+      // Known male voice name patterns across platforms
+      return n.indexOf('male') >= 0 || n.indexOf('daniel') >= 0 || n.indexOf('alex') >= 0
+        || n.indexOf('david') >= 0 || n.indexOf('james') >= 0 || n.indexOf('thomas') >= 0
+        || n.indexOf('fred') >= 0 || n.indexOf('rishi') >= 0 || n.indexOf('tom') >= 0
+        || n.indexOf('yunxi') >= 0 || n.indexOf('yunyang') >= 0 || n.indexOf('yunjian') >= 0
+        || n.indexOf('kangkang') >= 0 || n.indexOf('yunze') >= 0
+        || n.indexOf('男') >= 0;
+    });
+    var pick = male.length ? male[0] : matched[0];
+    voiceCache[lang] = pick;
+    return pick;
+  }
+  // Preload voices (some browsers load async)
+  synth.onvoiceschanged = function() { voiceCache = {}; };
+
+  function speakText(text, lang, btn) {
+    stopSpeaking();
+    var utter = new SpeechSynthesisUtterance(text);
+    utter.lang = lang;
+    var voice = pickVoice(lang);
+    if (voice) utter.voice = voice;
+    utter.rate = lang === 'zh-CN' ? 0.9 : 0.95;
+    utter.pitch = 0.95; // slightly lower pitch for more masculine tone
+    currentBtn = btn;
+    btn.classList.add('speaking');
+    btn.textContent = '⏹';
+    utter.onend = function() { stopSpeaking(); };
+    utter.onerror = function() { stopSpeaking(); };
+    synth.speak(utter);
+    // Chrome bug: keep alive for long texts
+    var keepAlive = setInterval(function() {
+      if (!synth.speaking) { clearInterval(keepAlive); return; }
+      synth.pause(); synth.resume();
+    }, 10000);
+    utter.onend = function() { clearInterval(keepAlive); stopSpeaking(); };
+    utter.onerror = function() { clearInterval(keepAlive); stopSpeaking(); };
+  }
+
+  function addButtons() {
+    var els = document.querySelectorAll(READABLE);
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.querySelector('.tts-btn')) continue; // already added
+      if (el.textContent.trim().length < 10) continue; // skip very short
+      var btn = document.createElement('button');
+      btn.className = 'tts-btn';
+      btn.textContent = '🔊';
+      btn.setAttribute('aria-label', 'Read aloud');
+      (function(targetEl, targetBtn) {
+        targetBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (targetBtn.classList.contains('speaking')) {
+            stopSpeaking();
+          } else {
+            var text = targetEl.textContent.replace('🔊', '').replace('⏹', '').trim();
+            var lang = detectLang(text);
+            speakText(text, lang, targetBtn);
+          }
+        });
+      })(el, btn);
+      el.appendChild(btn);
+    }
+  }
+
+  // Add buttons on load (run multiple times to catch late-rendering elements)
+  addButtons();
+  setTimeout(addButtons, 500);
+  setTimeout(addButtons, 1500);
+  // Also run when voices load (async on some browsers)
+  synth.addEventListener('voiceschanged', function() { voiceCache = {}; });
+
+  var origSwitch = window.switchTab;
+  window.switchTab = function(tabId) {
+    stopSpeaking();
+    origSwitch(tabId);
+    // Run addButtons multiple times after tab switch to catch all elements
+    setTimeout(addButtons, 100);
+    setTimeout(addButtons, 400);
+    setTimeout(addButtons, 1000);
+  };
+
+  // Stop on page hide
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) stopSpeaking();
+  });
+})();
 
 </script>
 

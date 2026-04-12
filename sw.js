@@ -1,4 +1,4 @@
-const CACHE_NAME = 'guduzoulang-edu-v1';
+const CACHE_NAME = 'guduzoulang-edu-v3';
 const PRECACHE = [
   './',
   './index.html',
